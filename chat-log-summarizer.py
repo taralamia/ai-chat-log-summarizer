@@ -1,49 +1,48 @@
 import re
-from collections import Counter
 import string
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-try:
-    from nltk.corpus import stopwords
-    nltk_stopwords = set(stopwords.words('english'))
-except LookupError:
-    import nltk
-    nltk.download('stopwords')
-    nltk_stopwords = set(nltk.corpus.stopwords.words('english'))
-
-#CONFIG
-CHAT_FILE = 'chat.txt'
-
-#LOAD CHAT
-with open(CHAT_FILE, 'r', encoding='utf-8') as file:
+# Load chat log
+with open("chat.txt", "r", encoding="utf-8") as file:
     lines = file.readlines()
 
-#PARSE MESSAGES
+# Separate messages
 user_messages = []
 ai_messages = []
 
 for line in lines:
-    line = line.strip()
     if line.startswith("User:"):
-        user_messages.append(line[len("User:"):].strip())
+        user_msg = line.replace("User:", "").strip()
+        user_messages.append(user_msg)
     elif line.startswith("AI:"):
-        ai_messages.append(line[len("AI:"):].strip())
+        ai_msg = line.replace("AI:", "").strip()
+        ai_messages.append(ai_msg)
 
+# Count stats
 total_messages = len(user_messages) + len(ai_messages)
 
-#KEYWORD ANALYSIS
-def extract_keywords(messages):
-    words = []
-    for msg in messages:
-        tokens = msg.lower().translate(str.maketrans('', '', string.punctuation)).split()
-        filtered = [w for w in tokens if w not in nltk_stopwords]
-        words.extend(filtered)
-    return Counter(words).most_common(5)
+# Preprocess messages for TF-IDF
+def preprocess(text):
+    text = text.lower()
+    text = re.sub(f'[{re.escape(string.punctuation)}]', '', text)
+    return text
 
-combined_messages = user_messages + ai_messages
-top_keywords = extract_keywords(combined_messages)
+all_messages = user_messages + ai_messages
+processed_messages = [preprocess(msg) for msg in all_messages]
 
-#GENERATE SUMMARY
+# TF-IDF Keyword Extraction
+vectorizer = TfidfVectorizer(stop_words="english")
+tfidf_matrix = vectorizer.fit_transform(processed_messages)
+tfidf_scores = tfidf_matrix.sum(axis=0).A1
+feature_names = vectorizer.get_feature_names_out()
+
+# Get top 5 keywords
+tfidf_dict = dict(zip(feature_names, tfidf_scores))
+sorted_keywords = sorted(tfidf_dict.items(), key=lambda x: x[1], reverse=True)
+top_keywords = [word for word, score in sorted_keywords[:5]]
+
+# Print summary
 print("\nSummary:")
 print(f"- The conversation had {total_messages} exchanges.")
 print(f"- User sent {len(user_messages)} messages, AI responded with {len(ai_messages)} messages.")
-print("- Most common keywords:", ', '.join([kw for kw, _ in top_keywords]))
+print(f"- Most important keywords (TF-IDF): {', '.join(top_keywords)}")
